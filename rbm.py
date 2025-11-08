@@ -1,6 +1,6 @@
 from __future__ import print_function
 import numpy as np
-from sample import sample_hidden, sample_visible, gibbs_step, gibbs_chain, _logistic
+from sample import sample_hidden, sample_visible, gibbs_step, gibbs_chain, _logistic, gibbs_mult_chain_birthdeath, gibbs_mult_chain
 
 class RBM:
     def __init__(self, num_visible, num_hidden):
@@ -132,52 +132,72 @@ class RBM:
         _, visible_probs = sample_visible(data_with_bias, self.weights, add_bias=False)
         return visible_probs[:, 1:]  # Remove bias unit
 
-    def daydream(self, num_samples, initial_visible=None, burn_in=0, thinning=1):
+    def daydream(self, num_samples, initial_visible=None, burn_in=0, thinning=1, 
+                mode="normal", alpha=0.05, num_particles=10):
         """
-        Generate samples using a Gibbs chain.
+        Generate samples using Gibbs chain or Birth-Death dynamics.
         
         Parameters
         ----------
-        num_samples: Number of samples to generate.
+        num_samples : int
+            Number of samples to generate.
+        initial_visible : array-like, optional
+            Initial visible states. If None, random uniform initialization is used.
+        burn_in : int
+            Number of initial Gibbs steps to discard.
+        thinning : int
+            Interval between collected samples.
+        mode : {'normal', 'bd'}, default='normal'
+            'normal' → regular Gibbs sampling;
+            'bd' → Birth-Death dynamics sampling.
+        alpha : float, optional
+            Birth-Death rate coefficient (used when mode='bd').
+        num_particles : int, optional
+            Number of parallel particles (used when mode='bd').
         
         Returns
         -------
-        samples: Matrix where each row is a sample of the visible units.
+        samples : array
+            Sampled visible states after burn-in and thinning.
         """
-
-        # Prepare initial visible states (without bias column) for the chain
+        # Prepare initial visible states (without bias column)
         if initial_visible is None:
-            # Random initialization: shape (1, num_visible)
-            init_vis = np.random.rand(1, self.num_visible)
+                init_vis = np.random.rand(num_particles, self.num_visible)
+        if mode == "bd":
+            if initial_visible is not None:
+            
+                arr = np.asarray(initial_visible)
+                print(arr.shape)
+                if arr.ndim == 1:
+                    init_vis = np.repeat(arr.reshape(1, -1), num_particles, axis=0)
+                elif arr.ndim == 2:
+                    init_vis = np.repeat(arr, num_particles // arr.shape[0], axis=0)
+                else:
+                    raise ValueError("initial_visible must be 1D or 2D array")
+
+            print(f"[Birth-Death mode] Using {num_particles} parallel particles, alpha={alpha}")
+            total_steps = int(burn_in + num_samples * thinning)
+            samples = gibbs_mult_chain_birthdeath(init_vis, self.weights, num_steps=total_steps, alpha=alpha)
+            selected = samples[burn_in:total_steps:thinning]
+            final_samples = selected[-1]  
+            return final_samples
+
         else:
-            arr = np.asarray(initial_visible)
-            # Accept either (num_visible,) or (batch, num_visible)
-            if arr.ndim == 1:
-                init_vis = arr.reshape(1, -1)
-            elif arr.ndim == 2:
-                init_vis = arr
-            else:
-                raise ValueError("initial_visible must be 1D or 2D array")
+            if initial_visible is not None:
+                arr = np.asarray(initial_visible)
+                print(arr.shape)
+                if arr.ndim == 1:
+                    init_vis = arr.reshape(1, -1)
+                elif arr.ndim == 2:
+                    init_vis = arr
+                else:
+                    raise ValueError("initial_visible must be 1D or 2D array")
 
-        # Total steps to run: burn-in + num_samples * thinning
-        total_steps = int(burn_in + num_samples * thinning)
-        if total_steps <= 0:
-            raise ValueError("total Gibbs steps must be positive")
-
-        # Run Gibbs chain starting from init_vis
-        samples = gibbs_chain(init_vis, self.weights, total_steps)
-        # samples shape: (total_steps, batch, num_visible)
-
-        # Select samples after burn-in with thinning
-        selected = samples[burn_in:total_steps:thinning]
-        # selected shape: (num_samples_selected, batch, num_visible)
-
-        # If user requested num_samples but thinning arithmetic yields fewer/more,
-        # return what we have (caller can slice).
-        # Squeeze batch dim when batch==1 for convenience
-        if selected.shape[1] == 1:
-            return selected[:, 0, :]
-        return selected
-
-
-
+            print("[Normal Gibbs mode]")
+            total_steps = int(burn_in + num_samples * thinning)
+            samples = gibbs_mult_chain(init_vis, self.weights, total_steps)
+            selected = samples[burn_in:total_steps:thinning]
+            # if selected.shape[1] == 1:
+            #         return selected[:, 0, :]
+            final_samples = selected[-1]  
+            return final_samples

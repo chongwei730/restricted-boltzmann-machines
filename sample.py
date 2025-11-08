@@ -158,3 +158,110 @@ def gibbs_chain(initial_visible, weights, num_steps):
     
     # Return samples without the bias unit
     return samples[:, :, 1:]
+
+
+def gibbs_mult_chain(initial_visible, weights, num_steps):
+    """
+    Run multiple Gibbs chains in parallel for a specified number of steps.
+    
+    Parameters
+    ----------
+    initial_visible : array-like, shape (N, num_visible)
+        Initial batch of visible states (N = number of independent chains).
+    weights : array-like
+        The RBM weight matrix (including bias units).
+    num_steps : int
+        Number of Gibbs sampling steps to perform.
+        
+    Returns
+    -------
+    samples : array, shape (num_steps, N, num_visible)
+        Visible samples across all chains and steps.
+    """
+    num_visible = weights.shape[0] - 1
+    N = initial_visible.shape[0]  # number of chains
+
+    # Allocate storage: (steps, chains, num_visible)
+    samples = np.zeros((num_steps, N, num_visible))
+
+    # Add bias unit if missing
+    current_visible = initial_visible.copy()
+    if current_visible.shape[1] == num_visible:
+        current_visible = np.insert(current_visible, 0, 1, axis=1)
+
+    # Save initial visible states
+    samples[0] = current_visible[:, 1:]
+
+    # Main Gibbs loop
+    for t in range(1, num_steps):
+        # One full Gibbs step for all chains
+        visible_states, visible_probs, hidden_states, hidden_probs = gibbs_step(
+            current_visible[:, 1:], weights
+        )
+
+        # Update current visible layer
+        current_visible = visible_states
+
+        # Store current sample (excluding bias)
+        samples[t] = current_visible[:, 1:]
+
+    return samples
+
+
+
+def gibbs_mult_chain_birthdeath(initial_visible, weights, num_steps, alpha=0.1):
+    """
+    Run a parallel Gibbs chain with Birth-Death resampling mechanism.
+    
+    Parameters
+    ----------
+    initial_visible : array-like, shape (N, num_visible)
+        Initial batch of visible units (N = number of particles).
+    weights : array-like
+        The RBM weight matrix.
+    num_steps : int
+        Number of Gibbs + Birth-Death steps to perform.
+    alpha : float, optional
+        Birth-Death rate coefficient (controls how strongly high-energy
+        samples are removed and low-energy samples replicated).
+        
+    Returns
+    -------
+    samples : array, shape (num_steps, N, num_visible)
+        Sequence of visible samples across all particles.
+    """
+    num_visible = weights.shape[0] - 1
+    num_hidden = weights.shape[1] - 1
+    N = initial_visible.shape[0]
+
+    # Initialize storage
+    samples = np.zeros((num_steps, N, num_visible))
+    current_visible = initial_visible.copy()
+
+    # Add bias if needed
+    if current_visible.shape[1] == num_visible:
+        current_visible = np.insert(current_visible, 0, 1, axis=1)
+
+    samples[0] = current_visible[:, 1:]
+
+    for t in range(1, num_steps):
+        # ----- Step 1: Gibbs update -----
+        v_next, v_probs, h_states, h_probs = gibbs_step(current_visible[:, 1:], weights)
+
+        # ----- Step 2: Compute energies -----
+        # Remove bias before computing E = -v^T W h
+        v_no_bias = v_next[:, 1:]
+        h_no_bias = h_states[:, 1:]
+        E = -np.sum(v_no_bias @ weights[1:, 1:] * h_no_bias, axis=1)
+        E_mean = np.mean(E)
+
+        # ----- Step 3: Birth–Death resampling -----
+        fitness = np.exp(-alpha * (E - E_mean))
+        probs = fitness / np.sum(fitness) 
+        indices = np.random.choice(N, size=N, replace=True, p=probs)
+
+        v_resampled = v_next[indices]
+        current_visible = v_resampled
+        samples[t] = v_resampled[:, 1:]
+
+    return samples
