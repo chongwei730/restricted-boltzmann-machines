@@ -165,7 +165,6 @@ class RBM:
                 init_vis = np.random.rand(num_particles, self.num_visible)
         if mode == "bd":
             if initial_visible is not None:
-            
                 arr = np.asarray(initial_visible)
                 print(arr.shape)
                 if arr.ndim == 1:
@@ -189,7 +188,7 @@ class RBM:
                 if arr.ndim == 1:
                     init_vis = arr.reshape(1, -1)
                 elif arr.ndim == 2:
-                    init_vis = arr
+                    init_vis = np.repeat(arr, num_particles // arr.shape[0], axis=0)
                 else:
                     raise ValueError("initial_visible must be 1D or 2D array")
 
