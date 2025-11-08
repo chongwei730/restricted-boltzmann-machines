@@ -1,5 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from matplotlib.animation import PillowWriter
+from matplotlib.widgets import Slider
 import sys
 import os
 from datetime import datetime
@@ -157,6 +160,81 @@ def visualize_hidden_weights(rbm, n_filters=64, n_cols=8, shape=(28, 28), save_d
     for i in range(min(vis_hidden.shape[1], n_filters)):
         imgs.append(vis_hidden[:, i].reshape(shape))
     show_grid(imgs, cols=n_cols, titles=[f'w{i}' for i in range(len(imgs))], shape=shape, save_dir=save_dir, filename_prefix='hidden_weights')
+
+
+def visualize_particle_trajectories(trajectories, save_dir=None, filename_prefix='trajectories',
+                                   shape=(28, 28), cols=10, cmap='gray', interval=300, writer='pillow'):
+    """Create an animation showing particle samples at each timestep.
+
+    If save_dir is None, show an interactive window with a slider to drag time steps.
+    If save_dir is set, save as GIF (no slider).
+    """
+    arr = np.asarray(trajectories)
+    if arr.ndim == 2:
+        arr = arr.reshape(arr.shape[0], 1, arr.shape[1])
+    if arr.ndim != 3:
+        raise ValueError("trajectories must be shape (T, P, V) or (T, V)")
+
+    T, P, V = arr.shape
+    rows = int(np.ceil(P / cols))
+
+    fig, axes = plt.subplots(rows, cols, figsize=(2 * cols, 2 * rows))
+    axes = np.array(axes).reshape(-1)
+
+    def draw_frame(frame):
+        for p in range(P):
+            ax = axes[p]
+            img = arr[frame, p].reshape(shape)
+            ax.imshow(img, cmap=cmap, interpolation='nearest')
+            ax.set_title(f'p{p}', fontsize=8)
+            ax.axis('off')
+        for k in range(P, axes.size):
+            axes[k].clear()
+            axes[k].axis('off')
+        fig.suptitle(f'Timestep: {frame+1}/{T}', fontsize=14)
+        fig.canvas.draw_idle()
+
+    if save_dir:
+        # Save as GIF (no slider)
+        def init():
+            for ax in axes:
+                ax.axis('off')
+            return axes
+        def update(frame):
+            draw_frame(frame)
+            return axes
+        ani = animation.FuncAnimation(fig, update, frames=T, init_func=init, interval=interval, blit=False)
+        os.makedirs(save_dir, exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        filename = f"{filename_prefix}_{ts}.gif"
+        path = os.path.join(save_dir, filename)
+        try:
+            if writer == 'pillow':
+                pw = PillowWriter(fps=1000 / interval)
+                ani.save(path, writer=pw)
+            else:
+                ani.save(path)
+            plt.close(fig)
+            print(f"Saved particle trajectories animation to: {path}")
+            return path
+        except Exception as exc:
+            print("Failed to save animation, falling back to show():", exc)
+        plt.show()
+        return None
+    else:
+        # Interactive slider
+        plt.subplots_adjust(bottom=0.18)
+        ax_slider = plt.axes([0.2, 0.08, 0.6, 0.04])
+        slider = Slider(ax_slider, 'Timestep', 1, T, valinit=1, valstep=1)
+        draw_frame(0)
+
+        def on_slider(val):
+            frame = int(val) - 1
+            draw_frame(frame)
+
+        slider.on_changed(on_slider)
+        plt.show()
+        return None
 
 def visualize_energy_landscape(rbm, X_sample, dim_idx=(0, 1), grid_size=50, v_current=None, save_dir=None):
     """
