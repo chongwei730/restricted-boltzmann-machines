@@ -109,9 +109,9 @@ def show_grid(images, titles=None, shape=(28, 28), cols=5, cmap='gray', save_dir
             plt.show()
             return
 
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        # ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
         prefix = filename_prefix or 'grid'
-        filename = f"{prefix}_{ts}.png"
+        filename = f"{prefix}.png"
         path = os.path.join(save_dir, filename)
         plt.savefig(path, dpi=150, bbox_inches='tight')
         print(f"Saved visualization to: {path}")
@@ -136,39 +136,39 @@ def visualize_reconstructions(rbm, X_test, n_show=10, save_dir=None):
     show_grid(recon_display, titles=[f'recon {i}' for i in range(n_show)], save_dir=save_dir, filename_prefix='reconstructions')
 
 
-def visualize_daydream_samples(rbm, num_samples=10, mode="normal", save_dir=None):
-    print("Generating new samples (daydream)...")
-    samples = rbm.daydream(num_samples=num_samples, burn_in=6000, thinning=6000, mode=mode)
-    if samples.ndim == 1:
-        samples = samples.reshape(1, -1)
-    show_grid(samples[:10], titles=[f'sample {i}' for i in range(min(10, samples.shape[0]))], save_dir=save_dir, filename_prefix='daydream')
+# def visualize_daydream_samples(rbm, num_samples=10, mode="normal", save_dir=None):
+#     print("Generating new samples (daydream)...")
+#     samples = rbm.daydream(num_samples=num_samples, burn_in=6000, thinning=6000, mode=mode)
+#     if samples.ndim == 1:
+#         samples = samples.reshape(1, -1)
+#     show_grid(samples[:10], titles=[f'sample {i}' for i in range(min(10, samples.shape[0]))], save_dir=save_dir, filename_prefix='daydream')
 
 
-def visualize_impaired_reconstruction(rbm, X_test, mode="normal", save_dir=None):
-    print("Running impaired (half-masked) daydream tests...")
-    example = X_test[0]
-    img = example.reshape(28, 28).copy()
-    impaired = img.copy()
-    impaired[:, 14:] = 0.0
-    impaired_flat = impaired.reshape(1, -1)
+# def visualize_impaired_reconstruction(rbm, X_test, mode="normal", save_dir=None):
+#     print("Running impaired (half-masked) daydream tests...")
+#     example = X_test[0]
+#     img = example.reshape(28, 28).copy()
+#     impaired = img.copy()
+#     impaired[:, 14:] = 0.0
+#     impaired_flat = impaired.reshape(1, -1)
 
-    # show original and impaired
-    show_grid([img, impaired], titles=['original', 'impaired'], cols=2, save_dir=save_dir, filename_prefix='impaired_pair')
+#     # show original and impaired
+#     show_grid([img, impaired], titles=['original', 'impaired'], cols=2, save_dir=save_dir, filename_prefix='impaired_pair')
 
-    # deterministic reconstruction
-    hid = rbm.run_visible(impaired_flat)
-    recon_prob = rbm.run_hidden(hid)
-    recon_det = (recon_prob > 0.5).astype(np.float32).reshape(28, 28)
-    show_grid([impaired, recon_det], titles=['impaired', 'recon_from_impaired'], cols=2, save_dir=save_dir, filename_prefix='impaired_recon')
+#     # deterministic reconstruction
+#     hid = rbm.run_visible(impaired_flat)
+#     recon_prob = rbm.run_hidden(hid)
+#     recon_det = (recon_prob > 0.5).astype(np.float32).reshape(28, 28)
+#     show_grid([impaired, recon_det], titles=['impaired', 'recon_from_impaired'], cols=2, save_dir=save_dir, filename_prefix='impaired_recon')
 
-    # daydream continuation
-    chain_samples = rbm.daydream(
-        num_samples=10, initial_visible=impaired_flat,
-        burn_in=6000, thinning=1000, mode=mode
-    )
-    if chain_samples.ndim == 1:
-        chain_samples = chain_samples.reshape(1, -1)
-    show_grid(chain_samples[:10], titles=[f'imputed {i}' for i in range(chain_samples.shape[0])], cols=2, save_dir=save_dir, filename_prefix='imputed_chain')
+#     # daydream continuation
+#     chain_samples = rbm.daydream(
+#         num_samples=10, initial_visible=impaired_flat,
+#         burn_in=6000, thinning=1000, mode=mode
+#     )
+#     if chain_samples.ndim == 1:
+#         chain_samples = chain_samples.reshape(1, -1)
+#     show_grid(chain_samples[:10], titles=[f'imputed {i}' for i in range(chain_samples.shape[0])], cols=2, save_dir=save_dir, filename_prefix='imputed_chain')
 
 
 def visualize_hidden_weights(rbm, n_filters=64, n_cols=8, shape=(28, 28), save_dir=None):
@@ -223,8 +223,8 @@ def visualize_particle_trajectories(trajectories, save_dir=None, filename_prefix
             return axes
         ani = animation.FuncAnimation(fig, update, frames=T, init_func=init, interval=interval, blit=False)
         os.makedirs(save_dir, exist_ok=True)
-        ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-        filename = f"{filename_prefix}_{ts}.gif"
+        # ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        filename = f"{filename_prefix}.gif"
         path = os.path.join(save_dir, filename)
         try:
             if writer == 'pillow':
@@ -270,6 +270,7 @@ def visualize_energy_landscape(rbm, X_sample, dim_idx=(0, 1), grid_size=50, v_cu
     v_current : optional
         Current visible vector (e.g., sampled state) to highlight.
     """
+
     W = rbm.weights  # shape (num_visible+1, num_hidden+1)
     n_v = W.shape[0] - 1
     n_h = W.shape[1] - 1
@@ -316,8 +317,8 @@ def visualize_energy_landscape(rbm, X_sample, dim_idx=(0, 1), grid_size=50, v_cu
     if save_dir:
         try:
             os.makedirs(save_dir, exist_ok=True)
-            ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-            fname = f"energy_landscape_{dim_idx[0]}_{dim_idx[1]}_{ts}.png"
+            # ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            fname = f"energy_landscape_{dim_idx[0]}_{dim_idx[1]}.png"
             path = os.path.join(save_dir, fname)
             plt.savefig(path, dpi=150, bbox_inches='tight')
             print(f"Saved visualization to: {path}")
@@ -326,4 +327,66 @@ def visualize_energy_landscape(rbm, X_sample, dim_idx=(0, 1), grid_size=50, v_cu
         except Exception:
             pass
 
+    plt.show()
+
+
+
+
+
+def visualize_energy_distribution(rbm, X_test, Y_test, save_dir=None):
+    energies = []
+    labels = []
+
+    # why energy is zero?
+    for digit in range(10):
+        Xd = X_test[Y_test == digit][:200]
+        E_mean = np.mean(compute_energy(Xd, rbm.weights))
+        energies.append(E_mean)
+        labels.append(str(digit))
+        print(f"Digit {digit}: mean energy = {E_mean:.2f}")
+
+    noise = np.random.rand(200, X_test.shape[1])
+    noise_bin = (noise > 0.5).astype(np.float32)
+    E_noise = np.mean(compute_energy(noise_bin, rbm.weights))
+    energies.append(E_noise)
+    labels.append("noise")
+    print(f"Random noise: mean energy = {E_noise:.2f}")
+
+
+    impaired_imgs = []
+    for digit in range(10):
+        Xd = X_test[Y_test == digit][:20] 
+        X_imp = Xd.copy()
+        X_imp[:, 14*28:] = 0.0  
+        impaired_imgs.append(X_imp)
+    impaired_imgs = np.vstack(impaired_imgs)
+
+    E_impaired = np.mean(compute_energy(impaired_imgs, rbm.weights))
+    energies.append(E_impaired)
+    labels.append("impaired")
+    print(f"Impaired digits: mean energy = {E_impaired:.2f}")
+
+    plt.figure(figsize=(9,5))
+    colors = ['tab:blue']*10 + ['tab:red', 'tab:orange']
+    bars = plt.bar(range(len(energies)), energies, color=colors)
+    bars[-2].set_color('tab:red')      # noise 
+    bars[-1].set_color('tab:orange')   # impaired
+
+    plt.xlabel("Digit class / type")
+    plt.ylabel("Average Energy")
+    plt.title("Average Energy per Digit Class (with Noise & Impaired)")
+    plt.xticks(range(len(energies)), labels)
+    plt.tight_layout()
+
+    if save_dir:
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+            # ts = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            path = os.path.join(save_dir, f"energy_distribution.png")
+            plt.savefig(path, dpi=200)
+            print(f"Saved energy distribution plot to: {path}")
+            plt.close()
+            return
+        except Exception:
+            pass
     plt.show()

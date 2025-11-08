@@ -1,6 +1,6 @@
 import numpy as np
 
-def _logistic(x):
+def _logistic(x, T=2):
     """
     Compute the logistic sigmoid function.
     
@@ -14,7 +14,7 @@ def _logistic(x):
     array-like
         The logistic sigmoid of the input.
     """
-    return 1.0 / (1 + np.exp(-x))
+    return 1.0 / (1 + np.exp(-x / T))
 
 def sample_hidden(visible_data, weights, add_bias=True):
     """

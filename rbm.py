@@ -1,5 +1,7 @@
 from __future__ import print_function
 import numpy as np
+import os
+from datetime import datetime
 from sample import sample_hidden, sample_visible, gibbs_step, gibbs_chain, _logistic, gibbs_mult_chain_birthdeath, gibbs_mult_chain
 
 class RBM:
@@ -132,6 +134,31 @@ class RBM:
         visible_states, visible_probs = sample_visible(data_with_bias, self.weights, add_bias=False)
         return visible_states[:, 1:]  # Remove bias unit
 
+    def save_weights(self, filepath=None):
+
+        if filepath is None:
+
+            os.makedirs("models", exist_ok=True)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filepath = f"models/rbm_weights_{ts}.npy"
+        
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        np.save(filepath, self.weights)
+        print(f"Saved RBM weights to: {filepath}")
+        return filepath
+
+    def load_weights(self, filepath):
+
+        loaded_weights = np.load(filepath)
+        if loaded_weights.shape != self.weights.shape:
+            raise ValueError(
+                f"Loaded weights shape {loaded_weights.shape} "
+                f"does not match model shape {self.weights.shape}"
+            )
+        self.weights = loaded_weights
+        print(f"Loaded RBM weights from: {filepath}")
+    
     def daydream(self, num_samples, initial_visible=None, burn_in=0, thinning=1, 
                 mode="normal", alpha=0.05, num_particles=10):
         """
@@ -162,18 +189,18 @@ class RBM:
         """
         # Prepare initial visible states (without bias column)
         if initial_visible is None:
-                init_vis = np.random.rand(num_particles, self.num_visible)
-        if mode == "bd":
-            if initial_visible is not None:
-                arr = np.asarray(initial_visible)
-                print(arr.shape)
-                if arr.ndim == 1:
-                    init_vis = np.repeat(arr.reshape(1, -1), num_particles, axis=0)
-                elif arr.ndim == 2:
-                    init_vis = np.repeat(arr, num_particles // arr.shape[0], axis=0)
-                else:
-                    raise ValueError("initial_visible must be 1D or 2D array")
+            init_vis = np.random.rand(num_particles, self.num_visible)
+        else:
+            arr = np.asarray(initial_visible)
+            print(arr.shape)
+            if arr.ndim == 1:
+                init_vis = np.repeat(arr.reshape(1, -1), num_particles, axis=0)
+            elif arr.ndim == 2:
+                init_vis = np.repeat(arr[:1], num_particles, axis=0) 
+            else:
+                raise ValueError("initial_visible must be 1D or 2D array")
 
+        if mode == "bd":
             print(f"[Birth-Death mode] Using {num_particles} parallel particles, alpha={alpha}")
             total_steps = int(burn_in + num_samples * thinning)
             samples = gibbs_mult_chain_birthdeath(init_vis, self.weights, num_steps=total_steps, alpha=alpha)
@@ -186,15 +213,6 @@ class RBM:
             return selected
 
         else:
-            if initial_visible is not None:
-                arr = np.asarray(initial_visible)
-                print(arr.shape)
-                if arr.ndim == 1:
-                    init_vis = arr.reshape(1, -1)
-                elif arr.ndim == 2:
-                    init_vis = np.repeat(arr, num_particles // arr.shape[0], axis=0)
-                else:
-                    raise ValueError("initial_visible must be 1D or 2D array")
 
             print("[Normal Gibbs mode]")
             total_steps = int(burn_in + num_samples * thinning)
