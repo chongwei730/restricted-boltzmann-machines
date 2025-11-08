@@ -111,8 +111,8 @@ class RBM:
         data_with_bias = np.insert(data, 0, 1, axis=1)
         # sample_hidden returns (states, probs). For reconstruction/evaluation
         # we prefer probabilities (deterministic expectation) instead of stochastic samples
-        _, hidden_probs = sample_hidden(data_with_bias, self.weights, add_bias=False)
-        return hidden_probs[:, 1:]  # Remove bias unit
+        hidden_states, hidden_probs = sample_hidden(data_with_bias, self.weights, add_bias=False)
+        return hidden_states[:, 1:]  # Remove bias unit
 
     def run_hidden(self, data):
         """
@@ -129,8 +129,8 @@ class RBM:
         # Add bias unit before computing visible probabilities from hidden activations
         data_with_bias = np.insert(data, 0, 1, axis=1)
         # sample_visible returns (states, probs); return probabilities for deterministic recon
-        _, visible_probs = sample_visible(data_with_bias, self.weights, add_bias=False)
-        return visible_probs[:, 1:]  # Remove bias unit
+        visible_states, visible_probs = sample_visible(data_with_bias, self.weights, add_bias=False)
+        return visible_states[:, 1:]  # Remove bias unit
 
     def daydream(self, num_samples, initial_visible=None, burn_in=0, thinning=1, 
                 mode="normal", alpha=0.05, num_particles=10):

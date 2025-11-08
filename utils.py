@@ -9,7 +9,6 @@ from datetime import datetime
 
 from rbm import RBM
 
-
 def load_mnist_binarized(n_train=2000, n_test=500, random_binarize=True, seed=123):
     """Load MNIST and return binarized train/test arrays (values 0/1).
 
@@ -38,6 +37,10 @@ def load_mnist_binarized(n_train=2000, n_test=500, random_binarize=True, seed=12
     x_train = train.data.numpy().astype(np.float32) / 255.0
     x_test = test.data.numpy().astype(np.float32) / 255.0
     x = np.vstack([x_train, x_test])
+    y_train = train.targets.numpy()
+    y_test = test.targets.numpy()
+    y = np.concatenate([y_train, y_test])
+    
 
     # For reproducibility
     rng = np.random.RandomState(seed)
@@ -46,6 +49,7 @@ def load_mnist_binarized(n_train=2000, n_test=500, random_binarize=True, seed=12
     indices = np.arange(x.shape[0])
     rng.shuffle(indices)
     x = x[indices]
+    y = y[indices]
 
     # Select subset
     n_total = n_train + n_test
@@ -59,9 +63,23 @@ def load_mnist_binarized(n_train=2000, n_test=500, random_binarize=True, seed=12
     else:
         x_bin = (x > 0.5).astype(np.float32)
 
+
+    Y_train = y[:n_train]
+    Y_test = y[n_train:n_train + n_test]
     X_train = x_bin[:n_train].reshape(n_train, -1)
     X_test = x_bin[n_train:n_train + n_test].reshape(n_test, -1)
-    return X_train, X_test
+    return X_train, X_test, Y_train, Y_test 
+
+
+
+
+def compute_energy(v, W):
+    v_ext = np.insert(v, 0, 1, axis=1)
+    h_prob = 1 / (1 + np.exp(-v_ext @ W))
+    E = -np.sum(v_ext @ W * h_prob, axis=1)
+    return E
+
+
 
 
 def show_grid(images, titles=None, shape=(28, 28), cols=5, cmap='gray', save_dir=None, filename_prefix=None):
