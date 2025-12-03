@@ -121,10 +121,10 @@ def show_grid(images, titles=None, shape=(28, 28), cols=5, cmap='gray', save_dir
 
 
 
-def visualize_originals(X_test, n_show=10, save_dir=None):
+def visualize_originals(X_test, n_show=10, save_dir=None, name="originals"):
     originals = X_test[:n_show]
     print("Displaying original test images...")
-    show_grid(originals, titles=[f'orig {i}' for i in range(n_show)], save_dir=save_dir, filename_prefix='originals')
+    show_grid(originals, titles=[f'orig {i}' for i in range(n_show)], save_dir=save_dir, filename_prefix=name)
 
 
 def visualize_reconstructions(rbm, X_test, n_show=10, save_dir=None):

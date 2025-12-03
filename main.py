@@ -15,55 +15,52 @@ from utils import (
     load_mnist_binarized,
     visualize_originals,
     visualize_reconstructions,
-    # visualize_daydream_samples,
-    # visualize_impaired_reconstruction,
     visualize_hidden_weights,
     visualize_energy_landscape,
     visualize_particle_trajectories,
     visualize_energy_distribution,
-    compute_energy,
-    show_grid
 )
 from rbm import RBM
 import numpy as np
-import matplotlib.pyplot as plt
 import os
+import argparse
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int, default=0, help="Random seed")
+    parser.add_argument("--thinning", type=int, default=1000, help="Thinning")
+    parser.add_argument("--burn_in", type=int, default=6000, help="Burn in")
+    parser.add_argument("--alpha", type=float, default=0.01, help="alpha")
+
+    return parser.parse_args()
 
 
 
 def main():
+    args = parse_args()
     print("Loading and binarizing MNIST...")
     save_dir = './models'
-    X_train, X_test, Y_train, Y_test = load_mnist_binarized(n_train=2000, n_test=200, random_binarize=False)
+    X_train, X_test, Y_train, Y_test = load_mnist_binarized(n_train=20000, n_test=200, random_binarize=False)
+    num_visible = X_train.shape[1]
 
     weights_path = "models/rbm_weights_latest.npy"
-    rbm = RBM(num_visible=X_train.shape[1], num_hidden=128)
+    rbm = RBM(num_visible=num_visible, num_hidden=256)
     
     if os.path.exists(weights_path):
         print(f"find weights path: {weights_path}")
         rbm.load_weights(weights_path)
     else:
         print("train from scratch")
-        rbm.train(X_train, max_epochs=200, learning_rate=0.01, batch_size=64, cd_k=5)
+        rbm.train(X_train, max_epochs=1000, learning_rate=0.001, batch_size=128, cd_k=20, reg_lambda=1e-4)
         rbm.save_weights()
         rbm.save_weights(weights_path)
 
 
-
     visualize_energy_distribution(rbm, X_test, Y_test, save_dir=save_dir)
-
-
-    # # --- Visualization Steps ---
-    # Save visualizations to this folder (set to None to display instead)
-    # mode = "normal"
-
-
     visualize_originals(X_test, save_dir=save_dir)
     visualize_reconstructions(rbm, X_test, save_dir=save_dir)
-    # visualize_daydream_samples(rbm, mode=mode, save_dir=save_dir)
-    # visualize_impaired_reconstruction(rbm, X_test, mode=mode, save_dir=save_dir)
     visualize_hidden_weights(rbm, save_dir=save_dir)
-    sample = X_test[0]  # choose a single image
+    sample = X_train[0]  # choose a single image
     visualize_energy_landscape(rbm, sample, dim_idx=(100, 150), save_dir=save_dir)
 
     # Generate multi-particle trajectories and visualize them dynamically.
@@ -71,45 +68,43 @@ def main():
 
 
 
-    num_particles = 10
-    num_samples = 12
-    burn_in = 6000
-    thinning = 1000
+    num_particles = 100
+    num_samples = 20
+    burn_in = args.burn_in
+    thinning = args.thinning
+    impaired_X_test = X_test[5].copy()
 
 
-
-    impaired_X_test = X_test.copy()
-
-    N = impaired_X_test.shape[0]
-    impaired_X_test = impaired_X_test.reshape(N, 28, 28)
+    impaired_X_test = impaired_X_test.reshape(1, 28, 28)
     impaired_X_test[:, :, 14:] = 0.0 
 
-    impaired_X_test = impaired_X_test.reshape(N, -1)
+    impaired_X_test = impaired_X_test.reshape(1, -1)
+    impaired_X_test = impaired_X_test
+
+    visualize_originals(impaired_X_test, save_dir=save_dir, name="impaired_sample")
+
+    alpha = args.alpha
+    np.random.seed(args.seed)
+    init_vis = np.random.rand(num_particles, num_visible)
+    save_dir = f"seed-{args.seed}/alpha-{alpha}/burnin-{burn_in}/thinning-{thinning}"
 
 
-    n_show = 5
-    show_grid(
-        [X_test[i].reshape(28, 28) for i in range(n_show)] +
-        [impaired_X_test[i].reshape(28, 28) for i in range(n_show)],
-        titles=['orig']*n_show + ['impaired']*n_show,
-        cols=n_show,
-        save_dir=save_dir,
-        filename_prefix='impaired_samples'
-    )
 
-    # print(f"Generating trajectories from scratch: num_particles={num_particles}, num_samples={num_samples}")
+
+    print(f"Generating trajectories from scratch: num_particles={num_particles}, num_samples={num_samples}")
+    # trajectories shape expected: (T, P, V) or (T, V) for single-particle
     # trajectories = rbm.daydream(
+    #     initial_visible=init_vis,
     #     num_samples=num_samples,
     #     burn_in=burn_in,
+    #     alpha=alpha,
     #     thinning=thinning,
     #     mode="bd",
     #     num_particles=num_particles,
     # )
-
-    # # trajectories shape expected: (T, P, V) or (T, V) for single-particle
     # visualize_particle_trajectories(
     #     trajectories,
-    #     save_dir="./bd_vis_output",
+    #     save_dir=f"./bd_vis_output/{save_dir}",
     #     filename_prefix=f"particle_traj_bd",
     #     shape=(28, 28),
     #     cols=5,
@@ -117,18 +112,19 @@ def main():
     # )
 
 
+
+
     # trajectories = rbm.daydream(
+    #     initial_visible=init_vis,
     #     num_samples=num_samples,
     #     burn_in=burn_in,
     #     thinning=thinning,
     #     mode="normal",
     #     num_particles=num_particles,
     # )
-
-    # # trajectories shape expected: (T, P, V) or (T, V) for single-particle
     # visualize_particle_trajectories(
     #     trajectories,
-    #     save_dir="./normal_vis_output",
+    #     save_dir=f"./normal_vis_output/{save_dir}",
     #     filename_prefix=f"particle_traj_normal",
     #     shape=(28, 28),
     #     cols=5,
@@ -138,26 +134,25 @@ def main():
 
 
 
+    # print(f"Generating trajectories from impaired data: num_particles={num_particles}, num_samples={num_samples}")
+    # trajectories = rbm.daydream(
+    #     initial_visible=impaired_X_test,
+    #     num_samples=num_samples,
+    #     burn_in=burn_in,
+    #     thinning=thinning,
+    #     alpha=alpha,
+    #     mode="bd",
+    #     num_particles=num_particles,
+    # )
+    # visualize_particle_trajectories(
+    #     trajectories,
+    #     save_dir=f"./bd_vis_output/{save_dir}",
+    #     filename_prefix=f"recon_particle_traj_bd",
+    #     shape=(28, 28),
+    #     cols=5,
+    #     interval=400,
+    # )
 
-    print(f"Generating trajectories from impaired data: num_particles={num_particles}, num_samples={num_samples}")
-    trajectories = rbm.daydream(
-        initial_visible=impaired_X_test,
-        num_samples=num_samples,
-        burn_in=burn_in,
-        thinning=thinning,
-        mode="bd",
-        num_particles=num_particles,
-    )
-
-    # trajectories shape expected: (T, P, V) or (T, V) for single-particle
-    visualize_particle_trajectories(
-        trajectories,
-        save_dir="./bd_vis_output",
-        filename_prefix=f"recon_particle_traj_bd",
-        shape=(28, 28),
-        cols=5,
-        interval=400,
-    )
 
 
     trajectories = rbm.daydream(
@@ -168,17 +163,14 @@ def main():
         mode="normal",
         num_particles=num_particles,
     )
-
-    # trajectories shape expected: (T, P, V) or (T, V) for single-particle
     visualize_particle_trajectories(
         trajectories,
-        save_dir="./normal_vis_output",
+        save_dir=f"./normal_vis_output/{save_dir}",
         filename_prefix=f"recon_particle_traj_normal",
         shape=(28, 28),
         cols=5,
         interval=400,
     )
-
     print("Done.")
 
 

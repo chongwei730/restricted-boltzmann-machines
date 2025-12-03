@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy as np
 import os
 from datetime import datetime
-from sample import sample_hidden, sample_visible, gibbs_step, gibbs_chain, _logistic, gibbs_mult_chain_birthdeath, gibbs_mult_chain
+from sample import sample_hidden, sample_visible, gibbs_step, gibbs_chain, _logistic, gibbs_mult_chain_birthdeath, gibbs_mult_chain, gibbs_mult_chain_birthdeath_torch
 
 class RBM:
     def __init__(self, num_visible, num_hidden):
@@ -22,7 +22,7 @@ class RBM:
         self.weights = np.insert(self.weights, 0, 0, axis=0)
         self.weights = np.insert(self.weights, 0, 0, axis=1)
 
-    def train(self, data, max_epochs=1000, learning_rate=0.1, batch_size=None, cd_k=1):
+    def train(self, data, max_epochs=1000, learning_rate=0.1, batch_size=None, cd_k=1, reg_lambda=1e-4):
         """
         Train the machine.
         
@@ -54,7 +54,16 @@ class RBM:
                 neg_associations = np.dot(neg_visible_probs.T, neg_hidden_probs)
 
                 # Update weights (normalize by number of examples)
-                self.weights += learning_rate * ((pos_associations - neg_associations) / num_examples)
+                grad = (pos_associations - neg_associations) / num_examples
+
+                # === L2 regularization (skip bias row/col) ===
+                W_no_bias = self.weights.copy()
+                W_no_bias[0, :] = 0
+                W_no_bias[:, 0] = 0
+                grad -= reg_lambda * W_no_bias     # reg_lambda is e.g. 1e-4
+
+                # === Update ===
+                self.weights += learning_rate * grad
 
                 # Calculate reconstruction error (mean squared error per pixel)
                 mse = np.mean((data - neg_visible_probs[:, 1:]) ** 2)
@@ -88,7 +97,15 @@ class RBM:
 
                     # Update weights normalized by batch size
                     bsize = batch.shape[0]
-                    self.weights += learning_rate * ((pos_associations - neg_associations) / bsize)
+                    grad = (pos_associations - neg_associations) / bsize
+
+                    # L2 regularization (no bias)
+                    W_no_bias = self.weights.copy()
+                    W_no_bias[0, :] = 0
+                    W_no_bias[:, 0] = 0
+                    grad -= reg_lambda * W_no_bias
+
+                    self.weights += learning_rate * grad
 
                     # Accumulate MSE for reporting
                     mse_acc += np.mean((batch - neg_visible_probs[:, 1:]) ** 2)
@@ -160,7 +177,7 @@ class RBM:
         print(f"Loaded RBM weights from: {filepath}")
     
     def daydream(self, num_samples, initial_visible=None, burn_in=0, thinning=1, 
-                mode="normal", alpha=0.05, num_particles=10):
+                mode="normal", alpha=0.00005, num_particles=10):
         """
         Generate samples using Gibbs chain or Birth-Death dynamics.
         
@@ -187,15 +204,17 @@ class RBM:
         samples : array
             Sampled visible states after burn-in and thinning.
         """
+
         # Prepare initial visible states (without bias column)
         if initial_visible is None:
             init_vis = np.random.rand(num_particles, self.num_visible)
         else:
             arr = np.asarray(initial_visible)
-            print(arr.shape)
+
             if arr.ndim == 1:
                 init_vis = np.repeat(arr.reshape(1, -1), num_particles, axis=0)
             elif arr.ndim == 2:
+
                 init_vis = np.repeat(arr[:1], num_particles, axis=0) 
             else:
                 raise ValueError("initial_visible must be 1D or 2D array")
