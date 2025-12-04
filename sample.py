@@ -1,5 +1,7 @@
 import numpy as np
 import torch 
+from utils import rbf_mmd
+
 
 
 def _logistic(x, T=2):
@@ -181,6 +183,7 @@ def gibbs_mult_chain(initial_visible, weights, num_steps):
     samples : array, shape (num_steps, N, num_visible)
         Visible samples across all chains and steps.
     """
+    target_samples = np.load("./ground_truth.npy")
     num_visible = weights.shape[0] - 1
     N = initial_visible.shape[0]  # number of chains
 
@@ -194,6 +197,8 @@ def gibbs_mult_chain(initial_visible, weights, num_steps):
 
     # Save initial visible states
     samples[0] = current_visible[:, 1:]
+    
+    lst = []
 
     # Main Gibbs loop
     for t in range(1, num_steps):
@@ -207,8 +212,13 @@ def gibbs_mult_chain(initial_visible, weights, num_steps):
 
         # Store current sample (excluding bias)
         samples[t] = current_visible[:, 1:]
+        print("start cal")
+        mmd_val = rbf_mmd(current_visible[:, 1:], target_samples)
+        print(mmd_val)
+        lst.append(mmd_val)
 
-    return samples
+
+    return samples, lst
 
 
 
@@ -340,7 +350,7 @@ def gibbs_mult_chain_birthdeath(initial_visible, weights, num_steps, alpha=0.1, 
     """
     Correct RBM Birth-Death Sampling (BD-FP version).
     """
-
+    target_samples = np.load("./ground_truth.npy")
     num_visible = weights.shape[0] - 1
     num_hidden = weights.shape[1] - 1
     N = initial_visible.shape[0]
@@ -369,6 +379,8 @@ def gibbs_mult_chain_birthdeath(initial_visible, weights, num_steps, alpha=0.1, 
         visible_term = v_no_bias @ vbias
         return -visible_term - hidden_term
 
+    lst = []
+
     for t in range(1, num_steps):
 
         # ---- Gibbs ----
@@ -388,8 +400,8 @@ def gibbs_mult_chain_birthdeath(initial_visible, weights, num_steps, alpha=0.1, 
         beta = E - E_mean
 
         # ---- Birth–Death ----
-        p_death = dt * alpha * np.maximum(-beta, 0)
-        p_birth = dt * alpha * np.maximum(beta, 0)
+        p_death = dt * alpha * np.maximum(beta, 0)
+        p_birth = dt * alpha * np.maximum(-beta, 0)
 
         # clip to valid probability range
         p_death = np.clip(p_death, 0, 1)
@@ -412,8 +424,13 @@ def gibbs_mult_chain_birthdeath(initial_visible, weights, num_steps, alpha=0.1, 
             v[death_mask] = v[parents]
 
         samples[t] = v[:, 1:]
+        print("start cal")
+        mmd_val = rbf_mmd(v[:, 1:], target_samples)
+        print(mmd_val)
+        lst.append(mmd_val)
 
-    return samples
+
+    return samples, lst
 
 
 

@@ -222,22 +222,22 @@ class RBM:
         if mode == "bd":
             print(f"[Birth-Death mode] Using {num_particles} parallel particles, alpha={alpha}")
             total_steps = int(burn_in + num_samples * thinning)
-            samples = gibbs_mult_chain_birthdeath(init_vis, self.weights, num_steps=total_steps, alpha=alpha)
+            samples, lst = gibbs_mult_chain_birthdeath(init_vis, self.weights, num_steps=total_steps, alpha=alpha)
             # selected contains the kept samples after burn-in and thinning
             selected = samples[burn_in:total_steps:thinning]
             # Keep backward compatibility: if there's a single particle, squeeze
             if selected.ndim == 3 and selected.shape[1] == 1:
                 # shape (T, 1, V) -> (T, V)
                 return selected.squeeze(axis=1)
-            return selected
+            return selected, lst
 
         else:
 
             print("[Normal Gibbs mode]")
             total_steps = int(burn_in + num_samples * thinning)
-            samples = gibbs_mult_chain(init_vis, self.weights, total_steps)
+            samples, lst = gibbs_mult_chain(init_vis, self.weights, total_steps)
             selected = samples[burn_in:total_steps:thinning]
             # Keep backward compatibility: if there's a single particle, squeeze
             if selected.ndim == 3 and selected.shape[1] == 1:
                 return selected.squeeze(axis=1)
-            return selected
+            return selected, lst

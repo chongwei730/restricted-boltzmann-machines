@@ -24,6 +24,7 @@ from rbm import RBM
 import numpy as np
 import os
 import argparse
+import matplotlib as plt
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -135,15 +136,15 @@ def main():
 
 
     # print(f"Generating trajectories from impaired data: num_particles={num_particles}, num_samples={num_samples}")
-    # trajectories = rbm.daydream(
-    #     initial_visible=impaired_X_test,
-    #     num_samples=num_samples,
-    #     burn_in=burn_in,
-    #     thinning=thinning,
-    #     alpha=alpha,
-    #     mode="bd",
-    #     num_particles=num_particles,
-    # )
+    bd_trajectories, lst_bd = rbm.daydream(
+        initial_visible=impaired_X_test,
+        num_samples=num_samples,
+        burn_in=burn_in,
+        thinning=thinning,
+        alpha=alpha,
+        mode="bd",
+        num_particles=num_particles,
+    )
     # visualize_particle_trajectories(
     #     trajectories,
     #     save_dir=f"./bd_vis_output/{save_dir}",
@@ -155,7 +156,7 @@ def main():
 
 
 
-    trajectories = rbm.daydream(
+    trajectories, lst_normal = rbm.daydream(
         initial_visible=impaired_X_test,
         num_samples=num_samples,
         burn_in=burn_in,
@@ -163,14 +164,42 @@ def main():
         mode="normal",
         num_particles=num_particles,
     )
-    visualize_particle_trajectories(
-        trajectories,
-        save_dir=f"./normal_vis_output/{save_dir}",
-        filename_prefix=f"recon_particle_traj_normal",
-        shape=(28, 28),
-        cols=5,
-        interval=400,
-    )
+
+
+
+    
+    
+    # visualize_particle_trajectories(
+    #     trajectories,
+    #     save_dir=f"./normal_vis_output/{save_dir}",
+    #     filename_prefix=f"recon_particle_traj_normal",
+    #     shape=(28, 28),
+    #     cols=5,
+    #     interval=400,
+    # )
+
+
+    min_len = min(len(lst_bd), len(lst_normal))
+    bd = np.array(lst_bd[:min_len])
+    normal = np.array(lst_normal[:min_len])
+
+    plt.figure(figsize=(7, 5))
+    plt.plot(bd, label='Birth-Death MCMC', linewidth=2)
+    plt.plot(normal, label='Standard Gibbs', linewidth=2)
+
+    plt.title("MMD vs. Iteration")
+    plt.xlabel("Iteration")
+    plt.ylabel("MMD² w.r.t. Ground Truth")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+
+
+
+
+    
+
+
     print("Done.")
 
 

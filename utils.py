@@ -6,8 +6,7 @@ from matplotlib.widgets import Slider
 import sys
 import os
 from datetime import datetime
-
-from rbm import RBM
+from scipy.spatial.distance import cdist
 
 def load_mnist_binarized(n_train=2000, n_test=500, random_binarize=True, seed=123):
     """Load MNIST and return binarized train/test arrays (values 0/1).
@@ -390,3 +389,43 @@ def visualize_energy_distribution(rbm, X_test, Y_test, save_dir=None):
         except Exception:
             pass
     plt.show()
+
+
+
+
+
+
+def rbf_mmd(A, B):
+    """
+    RBF-kernel MMD^2 between two sets.
+
+    A, B: (M, V)
+    """
+    A = A.reshape(-1, A.shape[-1])
+    B = B.reshape(-1, B.shape[-1])
+
+
+    def median_heuristic_sigma(A, B):
+        X = np.vstack([A, B])
+        dists = cdist(X, X, metric='euclidean')
+        return np.median(dists)
+    
+    sigma = median_heuristic_sigma(A, B)
+
+    def kernel(x, y):
+        xx = np.sum(x**2, axis=1, keepdims=True)
+        yy = np.sum(y**2, axis=1, keepdims=True)
+        dist2 = xx + yy.T - 2 * x @ y.T
+        return np.exp(-dist2 / (2 * sigma**2))
+
+    Kxx = kernel(A, A)
+    Kyy = kernel(B, B)
+    Kxy = kernel(A, B)
+
+    m = A.shape[0]
+    n = B.shape[0]
+
+    mmd2 = (Kxx.sum() - np.trace(Kxx)) / (m * (m - 1)) \
+         + (Kyy.sum() - np.trace(Kyy)) / (n * (n - 1)) \
+         - 2 * Kxy.mean()
+    return float(mmd2)
