@@ -70,7 +70,7 @@ def main():
 
 
     num_particles = 100
-    num_samples = 10
+    num_samples = 50
     burn_in = args.burn_in
     thinning = args.thinning
     impaired_X_test = X_test[5].copy()
@@ -211,7 +211,6 @@ def main():
     print(f"Results saved under {trj_dir}")
 
 
-    
 
 
     print("Done.")

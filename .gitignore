@@ -1,6 +1,7 @@
 data/
 bd_vis_output/
 normal_vis_output/
+trj_output/
 models/
 __pycache__/
 *.pyc
