@@ -1,11 +1,8 @@
-seed=0
 burn_in=0
 thinning=10
-alphas=(3e-7 5e-7 7e-7)
-
-for alpha in "${alphas[@]}"; do
+seeds=(1 2 3 4 5 6 7 8 9 10)
+for seed in "${seeds[@]}"; do
     python main.py --seed "$seed" \
                    --burn_in "$burn_in" \
-                   --thinning "$thinning" \
-                #    --alpha "$alpha"
+                   --thinning "$thinning" 
 done

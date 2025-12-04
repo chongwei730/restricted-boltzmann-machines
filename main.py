@@ -24,7 +24,7 @@ from rbm import RBM
 import numpy as np
 import os
 import argparse
-import matplotlib as plt
+import matplotlib.pyplot as plt
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -70,7 +70,7 @@ def main():
 
 
     num_particles = 100
-    num_samples = 20
+    num_samples = 10
     burn_in = args.burn_in
     thinning = args.thinning
     impaired_X_test = X_test[5].copy()
@@ -87,7 +87,7 @@ def main():
     alpha = args.alpha
     np.random.seed(args.seed)
     init_vis = np.random.rand(num_particles, num_visible)
-    save_dir = f"seed-{args.seed}/alpha-{alpha}/burnin-{burn_in}/thinning-{thinning}"
+    save_dir = f"seed-{args.seed}/"
 
 
 
@@ -136,6 +136,19 @@ def main():
 
 
     # print(f"Generating trajectories from impaired data: num_particles={num_particles}, num_samples={num_samples}")
+    base_save_dir = save_dir
+
+    bd_vis_dir = os.path.join("bd_vis_output", base_save_dir)
+    normal_vis_dir = os.path.join("normal_vis_output", base_save_dir)
+    trj_dir = os.path.join("trj_output", base_save_dir)
+
+    os.makedirs(bd_vis_dir, exist_ok=True)
+    os.makedirs(normal_vis_dir, exist_ok=True)
+    os.makedirs(trj_dir, exist_ok=True)
+
+
+
+
     bd_trajectories, lst_bd = rbm.daydream(
         initial_visible=impaired_X_test,
         num_samples=num_samples,
@@ -145,15 +158,17 @@ def main():
         mode="bd",
         num_particles=num_particles,
     )
-    # visualize_particle_trajectories(
-    #     trajectories,
-    #     save_dir=f"./bd_vis_output/{save_dir}",
-    #     filename_prefix=f"recon_particle_traj_bd",
-    #     shape=(28, 28),
-    #     cols=5,
-    #     interval=400,
-    # )
 
+    visualize_particle_trajectories(
+        bd_trajectories,
+        save_dir=bd_vis_dir,
+        filename_prefix="recon_particle_traj_bd",
+        shape=(28, 28),
+        cols=5,
+        interval=400,
+    )
+
+    np.save(os.path.join(trj_dir, "bd_trj.npy"), bd_trajectories)
 
 
     trajectories, lst_normal = rbm.daydream(
@@ -165,18 +180,16 @@ def main():
         num_particles=num_particles,
     )
 
+    visualize_particle_trajectories(
+        trajectories,
+        save_dir=normal_vis_dir,
+        filename_prefix="recon_particle_traj_normal",
+        shape=(28, 28),
+        cols=5,
+        interval=400,
+    )
 
-
-    
-    
-    # visualize_particle_trajectories(
-    #     trajectories,
-    #     save_dir=f"./normal_vis_output/{save_dir}",
-    #     filename_prefix=f"recon_particle_traj_normal",
-    #     shape=(28, 28),
-    #     cols=5,
-    #     interval=400,
-    # )
+    np.save(os.path.join(trj_dir, "normal_trj.npy"), trajectories)
 
 
     min_len = min(len(lst_bd), len(lst_normal))
@@ -194,7 +207,8 @@ def main():
     plt.legend()
     plt.tight_layout()
 
-
+    plt.savefig(os.path.join(trj_dir, "compare.png"))
+    print(f"Results saved under {trj_dir}")
 
 
     

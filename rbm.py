@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy as np
 import os
 from datetime import datetime
-from sample import sample_hidden, sample_visible, gibbs_step, gibbs_chain, _logistic, gibbs_mult_chain_birthdeath, gibbs_mult_chain, gibbs_mult_chain_birthdeath_torch
+from sample import sample_hidden, sample_visible, gibbs_step, gibbs_mult_chain_birthdeath, gibbs_mult_chain
 
 class RBM:
     def __init__(self, num_visible, num_hidden):

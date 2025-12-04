@@ -1,7 +1,7 @@
 import numpy as np
 import torch 
 from utils import rbf_mmd
-
+from scipy.spatial.distance import pdist
 
 
 def _logistic(x, T=2):
@@ -212,10 +212,10 @@ def gibbs_mult_chain(initial_visible, weights, num_steps):
 
         # Store current sample (excluding bias)
         samples[t] = current_visible[:, 1:]
-        print("start cal")
         mmd_val = rbf_mmd(current_visible[:, 1:], target_samples)
-        print(mmd_val)
         lst.append(mmd_val)
+
+        print(mmd_val)
 
 
     return samples, lst
@@ -225,130 +225,9 @@ def gibbs_mult_chain(initial_visible, weights, num_steps):
 
 
 
-
-def gibbs_mult_chain_torch(initial_visible, weights, num_steps, device="cuda"):
-    """
-    GPU version of gibbs_mult_chain using PyTorch.
-
-    initial_visible: (N, num_visible), NO BIAS
-    weights: (1+num_visible, 1+num_hidden)
-    """
-    # ============================================================
-    # 1. Ensure tensors are torch + cuda
-    # ============================================================
-    if not torch.is_tensor(initial_visible):
-        v = torch.tensor(initial_visible, dtype=torch.float32, device=device)
-    else:
-        v = initial_visible.to(device).float()
-
-    if not torch.is_tensor(weights):
-        weights = torch.tensor(weights, dtype=torch.float32, device=device)
-    else:
-        weights = weights.to(device).float()
-
-    N = v.shape[0]
-    num_visible = weights.shape[0] - 1
-
-    # ============================================================
-    # 2. Add visible bias column
-    # ============================================================
-    if v.shape[1] == num_visible:
-        ones = torch.ones((N, 1), device=device)
-        v = torch.cat([ones, v], dim=1)   # (N, 1+num_visible)
-
-    # ============================================================
-    # 3. Allocate storage (T, N, V)
-    # ============================================================
-    samples = torch.zeros((num_steps, N, num_visible), device=device)
-
-    # store initial sample (exclude bias)
-    samples[0] = v[:, 1:]
-
-    # ============================================================
-    # 4. Main Gibbs loop
-    # ============================================================
-    for t in range(1, num_steps):
-
-        # GPU-based Gibbs sampling
-        v_new, v_prob, h_state, h_prob = gibbs_step_torch(v[:, 1:], weights)
-
-        # v_new already includes bias
-        v = v_new
-
-        samples[t] = v[:, 1:]   # no bias
-
-    return samples
-
-
-
-
-
-
-
-
-def sample_hidden_torch(v_with_bias, weights, add_bias=False):
-    """
-    v_with_bias: (N, 1+num_visible)
-    weights: (1+num_visible, 1+num_hidden)
-    """
-    activations = v_with_bias @ weights  # (N, 1+num_hidden)
-    # hidden block is activations[:,1:]
-    probs = torch.sigmoid(activations[:, 1:])  # (N, num_hidden)
-
-    # sample Bernoulli
-    states = (torch.rand_like(probs) < probs).float()
-
-    if add_bias:
-        # prepend bias=1
-        ones = torch.ones((probs.shape[0], 1), device=probs.device)
-        states = torch.cat([ones, states], dim=1)
-
-    return states, probs
-
-
-def sample_visible_torch(h_with_bias, weights, add_bias=False):
-    """
-    h_with_bias: (N, 1+num_hidden)
-    weights: (1+num_visible, 1+num_hidden)^T  ← note RBM weight symmetry
-    """
-    activations = h_with_bias @ weights.T  # (N, 1+num_visible)
-    probs = torch.sigmoid(activations[:, 1:])  # (N, num_visible)
-
-    states = (torch.rand_like(probs) < probs).float()
-
-    if add_bias:
-        ones = torch.ones((probs.shape[0], 1), device=probs.device)
-        states = torch.cat([ones, states], dim=1)
-
-    return states, probs
-
-
-def gibbs_step_torch(visible_data, weights):
-    """
-    visible_data: (N, num_visible)  (NO BIAS)
-    weights: (1+num_visible, 1+num_hidden)
-    """
-
-    device = visible_data.device
-
-    # ---- Add visible bias ----
-    ones = torch.ones((visible_data.shape[0], 1), device=device)
-    v_with_bias = torch.cat([ones, visible_data], dim=1)
-
-    # ---- Sample h|v ----
-    h_states, h_probs = sample_hidden_torch(v_with_bias, weights, add_bias=True)
-    # h_states: (N, 1+num_hidden)
-
-    # ---- Sample v|h ----
-    v_states, v_probs = sample_visible_torch(h_states, weights, add_bias=True)
-    # v_states: (N, 1+num_visible)
-
-    # return without leading bias on visible
-    return v_states, v_probs, h_states, h_probs
-
 def gibbs_mult_chain_birthdeath(initial_visible, weights, num_steps, alpha=0.1, dt=1.0):
     """
-    Correct RBM Birth-Death Sampling (BD-FP version).
+    RBM Birth-Death Sampling (BD-FP version) with KDE (Hamming kernel + median heuristic sigma)
     """
     target_samples = np.load("./ground_truth.npy")
     num_visible = weights.shape[0] - 1
@@ -356,154 +235,106 @@ def gibbs_mult_chain_birthdeath(initial_visible, weights, num_steps, alpha=0.1, 
     N = initial_visible.shape[0]
 
     samples = np.zeros((num_steps, N, num_visible))
+    current_visible = initial_visible.copy()
+    if current_visible.shape[1] == num_visible:
+        current_visible = np.insert(current_visible, 0, 1, axis=1)
 
-    # add bias
+    # === bias handling ===
     v = initial_visible.copy()
-
-    # enforce v_no_bias must be num_visible dim
-    if v.shape[1] != num_visible + 1: 
-        # then initial_visible had no bias column
+    if v.shape[1] != num_visible + 1:
         v = np.insert(v, 0, 1, axis=1)
     else:
-        # initial_visible already has bias; ensure first col = 1
         v[:, 0] = 1
-
-    # extract rbm parameters
-    vbias = weights[1:, 0]        
-    hbias = weights[0, 1:]        
-    W     = weights[1:, 1:]     
     samples[0] = v[:, 1:]
+
+    # === extract parameters ===
+    vbias = weights[1:, 0]
+    hbias = weights[0, 1:]
+    W     = weights[1:, 1:]
+
+    # === helper functions ===
     def free_energy(v_no_bias):
         wx_b = v_no_bias @ W + hbias
         hidden_term = np.sum(np.log1p(np.exp(wx_b)), axis=1)
         visible_term = v_no_bias @ vbias
         return -visible_term - hidden_term
 
+    def kde_log_density_binary(X, sigma=2.0):
+        # Hamming kernel KDE
+        N = X.shape[0]
+        D = np.sum(X[:, None, :] != X[None, :, :], axis=2)
+        K = np.exp(-D / sigma)
+        rho = np.mean(K, axis=1) + 1e-12
+        return np.log(rho)
+
+    def median_heuristic_sigma(X, c=0.5):
+        dists = pdist(X, metric="euclidean")
+        return c * np.median(dists)
+
     lst = []
 
+    # === main loop ===
     for t in range(1, num_steps):
 
-        # ---- Gibbs ----
-        v_gibbs, v_prob, h_state, h_prob = gibbs_step(v[:, 1:], weights)
+        # 1. Gibbs sampling
+            v_gibbs, v_prob, h_state, h_prob = gibbs_step(v[:, 1:], weights)
+            v = v_gibbs
+            v[:, 0] = 1
+            v_no_bias = v[:, 1:]
 
-        # re-add bias column
-        v = v_gibbs
-        v[:, 0] = 1  
-        v_no_bias = v[:, 1:]
 
- 
-    
+            # 2. Free energy
+            V = free_energy(v_no_bias)
 
-        # ---- Free Energy ----
-        E = free_energy(v_no_bias)
-        E_mean = np.mean(E)
-        beta = E - E_mean
+            # 3. Bandwidth via median heuristic
+            sigma = median_heuristic_sigma(v_no_bias, c=0.5)
 
-        # ---- Birth–Death ----
-        p_death = dt * alpha * np.maximum(beta, 0)
-        p_birth = dt * alpha * np.maximum(-beta, 0)
+            # 4. KDE log-density (Hamming kernel)
+            log_rho = kde_log_density_binary(v_no_bias, sigma=sigma)
 
-        # clip to valid probability range
-        p_death = np.clip(p_death, 0, 1)
-        p_birth = np.clip(p_birth, 0, 1)
+            # 5. Relative density difference β_i
+            beta = log_rho + V
+            beta -= np.mean(beta)
+            beta /= (np.std(beta) + 1e-12)
 
-        death_mask = np.random.rand(N) < p_death
-        n_deaths = np.sum(death_mask)
 
-        if n_deaths > 0:
 
-            # if no one has birth probability > 0, fallback to uniform
-            if np.sum(p_birth) == 0:
-                birth_weights = np.ones(N) / N
-            else:
-                birth_weights = p_birth / np.sum(p_birth)
+            p_target = 0.1
+            max_rate = float(np.max(np.abs(beta)))
+            dt = min(1e-2, p_target / (max_rate + 1e-12))
 
-            parents = np.random.choice(N, size=n_deaths, p=birth_weights)
+            # 6. Birth–Death
+            rate_death = dt * np.maximum(beta, 0)
+            rate_birth = dt * np.maximum(-beta, 0)
+            p_birth = 1.0 - np.exp(-rate_birth )
+            p_death = 1.0 - np.exp(-rate_death )
+            pmax = max(p_birth.max(), p_death.max())
+            print("pmax", pmax)
+            
+      
+          
+            p_death = np.clip(p_death, 0, 1)
+            p_birth = np.clip(p_birth, 0, 1)
 
-            # replace dead particles with birth parents
-            v[death_mask] = v[parents]
+            death_mask = np.random.rand(N) < p_death
+            n_deaths = np.sum(death_mask)
+            if n_deaths > 0:
+                birth_weights = p_birth / np.sum(p_birth) if np.sum(p_birth) > 0 else np.ones(N) / N
+                parents = np.random.choice(N, size=n_deaths, p=birth_weights)
+                v[death_mask] = v[parents]
 
-        samples[t] = v[:, 1:]
-        print("start cal")
-        mmd_val = rbf_mmd(v[:, 1:], target_samples)
-        print(mmd_val)
-        lst.append(mmd_val)
-
+            # 7. Record and diagnostics
+            samples[t] = v[:, 1:]
+            mmd_val = rbf_mmd(v[:, 1:], target_samples)
+            lst.append(mmd_val)
+            bd_rate   = death_mask.mean()        
+            mean_pd   = p_death.mean()
+            mean_pb   = p_birth.mean()
+            beta_std  = beta.std()
+            print(f"Step {t:03d} | bd_rate={bd_rate:.3%}  mean(p_d)={mean_pd:.3e}  "
+                f"mean(p_b)={mean_pb:.3e}  std(beta)={beta_std:.3e}")
+            print(f"Step {t:03d} | mean(F)={V.mean():.3f}, mean(beta)={beta.mean():.3f}, sigma={sigma:.3f}, MMD={mmd_val:.5f}")
 
     return samples, lst
 
 
-
-
-
-
-def gibbs_mult_chain_birthdeath_torch(initial_visible, weights, num_steps,
-                                      alpha=0.1, dt=1.0, device='cuda'):
-
-    # move inputs to GPU
-    v = initial_visible.to(device)
-    weights = weights.to(device)
-
-    num_visible = weights.shape[0] - 1
-    num_hidden = weights.shape[1] - 1
-    N = v.shape[0]
-
-    samples = torch.zeros(num_steps, N, num_visible, device=device)
-
-    # ensure bias column
-    if v.shape[1] != num_visible + 1:
-        ones = torch.ones(N, 1, device=device)
-        v = torch.cat([ones, v], dim=1)
-    else:
-        v[:, 0] = 1.0
-
-    # parameters
-    vbias = weights[1:, 0]
-    hbias = weights[0, 1:]
-    W     = weights[1:, 1:]
-
-    def free_energy(v_no_bias):
-        wx_b = v_no_bias @ W + hbias
-        hidden_term = torch.log1p(torch.exp(wx_b)).sum(dim=1)
-        visible_term = v_no_bias @ vbias
-        return -(visible_term + hidden_term)
-
-    samples[0] = v[:, 1:]
-
-    for t in range(1, num_steps):
-
-        # ---- Gibbs ----
-        v_gibbs, _, _, _ = gibbs_step_torch(v[:, 1:], weights)
-        v = v_gibbs
-        v[:, 0] = 1.0
-
-        v_no_bias = v[:, 1:]
-
-        # ---- Free Energy ----
-        E = free_energy(v_no_bias)
-        E_mean = E.mean()
-        beta = E - E_mean
-
-        # ---- Birth–Death ----
-        p_death = dt * alpha * torch.clamp(-beta, min=0)
-        p_birth = dt * alpha * torch.clamp(beta, min=0)
-
-        p_death = torch.clamp(p_death, 0, 1)
-        p_birth = torch.clamp(p_birth, 0, 1)
-
-        death_mask = torch.rand(N, device=device) < p_death
-        n_deaths = death_mask.sum().item()
-
-        if n_deaths > 0:
-            if p_birth.sum() == 0:
-                birth_weights = torch.ones(N, device=device) / N
-            else:
-                birth_weights = p_birth / p_birth.sum()
-
-            parents = torch.multinomial(birth_weights, n_deaths, replacement=True)
-
-            v[death_mask] = v[parents]
-
-        samples[t] = v[:, 1:]
-
-    return samples
